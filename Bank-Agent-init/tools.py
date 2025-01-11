@@ -10,7 +10,7 @@ from langchain_core.messages import HumanMessage,AIMessage,SystemMessage
 
 
 llm = ChatGroq(
-    
+    ###
 )
 
 df=pd.read_csv("output.csv")
