@@ -6,5 +6,6 @@ from langgraph.graph.message import add_messages
 
 class MessageState(TypedDict):
     messages: Annotated[list[BaseMessage],add_messages]
-    account_balance: str
+    account_balance: float
     statement_summary: str
+    query: str

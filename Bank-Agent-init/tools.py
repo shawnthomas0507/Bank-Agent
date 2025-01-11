@@ -4,44 +4,43 @@ from langchain.agents.agent_types import AgentType
 from langchain.document_loaders import WebBaseLoader
 import pandas as pd
 from state import MessageState
+import pandasai
+from pandasai import SmartDataframe
+from langchain_core.messages import HumanMessage,AIMessage,SystemMessage
 
 
 llm = ChatGroq(
-  
+    
 )
 
 df=pd.read_csv("output.csv")
-agent=create_pandas_dataframe_agent(llm=llm,df=df,verbose=False,allow_dangerous_code=True)
+
+agent=SmartDataframe(df,config={"llm":llm})
 
 
 def imp_info(state: MessageState):
-    financial_summary=agent.invoke("give me a summary of my past transactions along with where i spent my money")['output']
-    account_balance=agent.invoke("what is my current account balance")['output']
+    financial_summary=agent.chat("Give me a summary of my past transactions with transaction at each place in a paragraph")
+    account_balance=df['Balance'].iloc[0]
     return {"account_balance":account_balance,"statement_summary":financial_summary}
 
-def rag_qa(query: str):
-    """
-    This function is used when the user wants any information regarding his bank account statement.
+def rag_qa(state: MessageState):
 
-    Args:
-    query: The question asked by the user.
-    """
-    summary=MessageState['statement_summary']
-    print(summary)
-    balance=MessageState['account_balance']
+    query=state["messages"][-2].content
+    summary=state["statement_summary"]
+    balance=state["account_balance"]
     instructions="""
     You are an intelligent financial agent
     You are provided with the user's financial summary and account balance.
     Using the information provided, you must answer the user's question in a clear and concise manner.
 
-    Question : {query}
+    User's Question : {query}
     Financial Summary : {financial_summary}
     Account Balance : {account_balance}
     """
 
     system_message=instructions.format(query=query,financial_summary=summary,account_balance=balance)
-    result=llm.invoke(system_message)
-    return {"messages":result.content}
+    result=llm.invoke([SystemMessage(content=system_message)])
+    return  {"messages":[AIMessage(content=result.content)]}
 
 
 

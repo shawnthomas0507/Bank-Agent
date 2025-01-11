@@ -1,5 +1,5 @@
 from typing import Annotated
-from langchain_core.messages import BaseMessage,SystemMessage,HumanMessage
+from langchain_core.messages import BaseMessage,SystemMessage,HumanMessage,AIMessage
 from langgraph.graph.message import add_messages
 from typing import TypedDict,Sequence
 from langchain_groq import ChatGroq
@@ -13,31 +13,45 @@ import operator
 from langgraph.prebuilt import ToolInvocation
 import json
 from state import MessageState
+from langgraph.checkpoint.memory import MemorySaver
+
 llm = ChatGroq(
     
 )
 
+def agent(state:MessageState):
+        user_query=state["messages"][-1]
+        ai_response2=llm.invoke([SystemMessage(content=f"You are an intelligent general assistant. You will be given a sentence.You have to tell whether the user wants any information regarding his bank account statement or when the user wants to buy something.If the user wants any information regarding his bank account statement say bank and if the user talks about buying something say buy. The sentence is {user_query}")])
+        if "bank" in ai_response2.content.lower():
+             return {"messages":[AIMessage(content="rag_node")]}
+        elif "buy" in ai_response2.content.lower():
+            return {"messages":[AIMessage(content="ask_2_buy")]}
+
+def should_continue(state:MessageState):
+      message = state["messages"][-1]
+      if message.content == "rag_node":
+        return "rag_node"
+      elif message.content=="ask_2_buy":
+        return "ask_2_buy"
 
 
-    
 
-
-llm_with_tools=llm.bind_tools([rag_qa,to_buy])
-
-def tool_calling_llm(state: MessageState):
-    return {"messages":[llm_with_tools.invoke(state["messages"]+[SystemMessage(content="You are a helpful assistant. Answer every question in detail. Give your reason for every answer")])]}
 
 
 builder=StateGraph(MessageState)
-builder.add_node("tool_calling_llm",tool_calling_llm)
-builder.add_node("tools",ToolNode([rag_qa,to_buy]))
 builder.add_node("imp_info",imp_info)
+builder.add_node("agent",agent)
+builder.add_node("rag_node",rag_qa)
+builder.add_node("ask_2_buy",to_buy)
 builder.add_edge(START,"imp_info")
-builder.add_edge("imp_info","tool_calling_llm")
-builder.add_conditional_edges(
-    "tool_calling_llm",tools_condition,
-)
-builder.add_edge("tools",END)
-graph=builder.compile()
+builder.add_edge("imp_info","agent")
+builder.add_conditional_edges("agent",should_continue,["rag_node","ask_2_buy"])
+builder.add_edge("rag_node",END)
+builder.add_edge("ask_2_buy",END)
+memory=MemorySaver()
+app=builder.compile(checkpointer=memory)
 
-print(graph.invoke({"messages": [SystemMessage(content="Where did i spend the least money?")]}))
+user_input = "What transactions I could have avoided?"
+thread={"configurable":{"thread_id":"1"}}
+for event in app.stream({"messages": [HumanMessage(content=user_input)]},thread,stream_mode="values"):
+    event["messages"][-1].pretty_print()
