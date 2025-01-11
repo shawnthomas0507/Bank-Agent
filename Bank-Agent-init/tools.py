@@ -7,15 +7,17 @@ from state import MessageState
 import pandasai
 from pandasai import SmartDataframe
 from langchain_core.messages import HumanMessage,AIMessage,SystemMessage
+from chat2plot import chat2plot
 
 
 llm = ChatGroq(
-    ###
+    
 )
 
 df=pd.read_csv("output.csv")
 
 agent=SmartDataframe(df,config={"llm":llm})
+c2p=chat2plot(df,chat=llm)
 
 
 def imp_info(state: MessageState):
@@ -56,18 +58,13 @@ def ask_user():
     user_input=input("Enter the link of the thing you want to buy:")
     return user_input
 
-def to_buy(query: str):
-    """
-    This function is called when the user wants to buy something and he wants to ask whether is it feasible to buy it or not.
-    Call this only when the user says he/she wants to buy something.
-
-    Args:
-    query: The question asked by the user.
-    """
+def to_buy(state: MessageState):
+    
     user_link=ask_user()
     scraped_data=scraper(user_link)
-    financial_summary=MessageState['statement_summary']
-    account_balance=MessageState['account_balance']
+    print(scraped_data)
+    financial_summary=state['statement_summary']
+    account_balance=state['account_balance']
     
     instructions="""
     You are an intelligent financial agent
@@ -84,6 +81,14 @@ def to_buy(query: str):
 
     system_message=instructions.format(scraped_data=scraped_data,financial_summary=financial_summary,account_balance=account_balance)
     result=llm.invoke(system_message)
-    return {"messages":result.content}
+    return {"messages":[AIMessage(content=result.content)]}
+
+
+def plot(state: MessageState):
+    query=state["messages"][-2].content
+    result = c2p(query)
+    result.figure.show()
+    return {"messages":"This is something I created based on what you have asked me"}
+
 
 
